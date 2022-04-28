@@ -22,29 +22,22 @@ def get_args():
         default='q',
         type=str)
 
-    parser.add_argument(
-        '-s', '-stats',
-        help="Print stats and plot",
-        nargs='?',
-        default=False,
-        type=bool)
-
     return parser.parse_args()
 
 def evaluate(input_file, register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length):
-    mean_mean_heat = 0 # randomness is though
-    for i in range(3):
-        execute(
-            input_file, "", 50, 
-            register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length,
-            path.dirname(__file__) + '/metrics/output.s', False, True
-        )
-        with open(path.dirname(__file__) + '/metrics/data_metrics1.txt') as f:
-            data = f.read()
-        mean_heats = literal_eval(re.search(r"Mean heat after: (\[.*\])", data).group(1))
-        mean_heat = sum(mean_heats) / 32
-        mean_mean_heat += mean_heat / 3
-    return mean_mean_heat
+    execute(
+        input_file, "", 50, 
+        register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length,
+        path.dirname(__file__) + '/metrics/output.s', False, True
+    )
+    with open(path.dirname(__file__) + '/metrics/data_metrics1.txt') as f:
+        data = f.read()
+    mean_heats = literal_eval(re.search(r"Mean heat after: (\[.*\])", data).group(1))
+    mean_heat = sum(mean_heats) / 32
+
+    with open(path.dirname(__file__) + '/metrics/output.s') as f:
+        lines_num = f.read().count("\n")
+    return mean_heat, lines_num
 
 
 def main():
@@ -52,13 +45,13 @@ def main():
     input_file = args.File
     max_overhead = args.Overhead
 
-    original_value = evaluate(input_file, 0, 0, 0, 0)
-    
+    original_value, original_lines_num = evaluate(input_file, 0, 0, 0, 0)
     print("Original mean heat:", original_value)
     print()
 
     costant_chain_length = 8
 
+    # Calculate totoa iterations
     total_iterations = 0
     for costant_obfuscation in range(0, max_overhead):
         if costant_obfuscation * costant_chain_length > max_overhead:
@@ -74,7 +67,8 @@ def main():
             else:
                 total_iterations += 1
 
-    best = (original_value, (0, 0, 0, 0))
+    # Try every combination
+    best = (original_value, 0, (0, 0, 0, 0))
     iteration = 0
     for costant_obfuscation in range(0, max_overhead):
         if costant_obfuscation * costant_chain_length > max_overhead:
@@ -93,11 +87,14 @@ def main():
                     iteration += 1
                     print(f"Executing with: {register_scrumbling} {costant_obfuscation} {garbage_blocks} {garbage_length} ({iteration} / {total_iterations})")
                     
-                    new_value = evaluate(input_file, register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length)
-                    
+                    new_value, lines_num = evaluate(input_file, register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length)
+                    overhead = lines_num - original_lines_num
+
                     print("New mean heat:", new_value)
+                    print("Overhead introduced:", overhead)
+                    print()
                     if new_value > best[0]:
-                        best = (new_value, (register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length))
+                        best = (new_value, overhead, (register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length))
 
 
 
@@ -106,26 +103,30 @@ def main():
                 iteration += 1
                 print(f"Executing with: {register_scrumbling} {costant_obfuscation} {0} {0} ({iteration} / {total_iterations})")
                 
-                new_value = evaluate(input_file, register_scrumbling, costant_obfuscation, 0, 0)
-                
+                new_value, lines_num = evaluate(input_file, register_scrumbling, costant_obfuscation, 0, 0)
+                overhead = lines_num - original_lines_num
+
                 print("New mean heat:", new_value)
+                print("Overhead introduced:", overhead)
+                print()
                 if new_value > best[0]:
-                    best = (new_value, (register_scrumbling, costant_obfuscation, 0, 0))
+                    best = (new_value, overhead, (register_scrumbling, costant_obfuscation, 0, 0))
  
     print()
     print("DONE")
     print("Best parameters:")
-    print("Register scrambling:", best[1][0])
-    print("Costant obfuscation:", best[1][1])
-    print("Garbage blocks:", best[1][2])
-    print("Garbage length:", best[1][3])
+    print("Register scrambling:", best[2][0])
+    print("Costant obfuscation:", best[2][1])
+    print("Garbage blocks:", best[2][2])
+    print("Garbage length:", best[2][3])
     print()
     print("Original mean heat:", original_value)
     print("Best mean heat:", best[0])
+    print("Overhead introduced:", best[1])
 
     execute(
         input_file, "", 50, 
-        *best[1],
+        *best[2],
         path.dirname(__file__) + '/metrics/output.s', False, True, "best"
     )
 
