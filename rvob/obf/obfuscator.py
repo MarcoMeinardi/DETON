@@ -341,8 +341,8 @@ def obfuscate(cfg: DiGraph, node_id: int = None, target_instr: int = None):
         node_id = extracted[0]
         target_instr = extracted[1]
     instruction = cfg.nodes[node_id]["block"][target_instr]
-    max_shift = randint(1, 10)
-    max_logical = randint(1, 10)
+    max_shift = 3
+    max_logical = 5
     promise_chain = generate_derivation_chain(instruction, max_shift, max_logical)
     node_chain = calc_nodes_chain(cfg, node_id, target_instr, instruction.r1)
     target_instr_off = placer(cfg, promise_chain, node_chain, target_instr)
