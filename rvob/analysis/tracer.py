@@ -90,7 +90,7 @@ def get_new_execution(cfg: DiGraph, max_recursion: int):
     @return: a tuple where in the first position there is the list of the branching's decisions and the second element
              is the heat-map associated to the execution
     """
-    seed()
+    # seed()
     line_counter = count(0)
     path_decision = []
     last_jump_line = 0
@@ -137,7 +137,7 @@ def replay_execution(cfg: DiGraph, max_recursion: int, ex_path: List[bool]):
     @return: a tuple where in the first position there is the list of the branching's decisions and the second element
              is the heat-map associated to the execution
     """
-    seed()
+    # seed()
     line_counter = count(0)
     path_decision = list(ex_path)
     last_jump_line = 0

@@ -292,7 +292,7 @@ def generate_derivation_chain(instruction: Instruction, max_shifts: int, max_log
     :return: a list of promises implementing the constant derivation
     """
 
-    seed()
+    # seed()
 
     # Load Immediate instructions have to be treated in a special way, since they have a very long immediate value.
     # Split the 'li' into 'lui' and 'ori', targeting the latter for obfuscation and keeping aside the 'lui' as a

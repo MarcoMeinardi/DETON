@@ -1,6 +1,7 @@
 import argparse
 from os import path
 import re
+import random
 from ast import literal_eval
 from deton import execute
 
@@ -41,11 +42,13 @@ def evaluate(input_file, register_scrumbling, costant_obfuscation, garbage_block
 
 
 def main():
+    random.seed(0)
     args = get_args()
     input_file = args.File
-    max_overhead = args.Overhead
 
     original_value, original_lines_num = evaluate(input_file, 0, 0, 0, 0)
+    max_overhead = args.Overhead * original_lines_num // 100
+    print("Max absolute overhead:", max_overhead)
     print("Original mean heat:", original_value)
     print()
 

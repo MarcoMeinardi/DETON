@@ -189,7 +189,7 @@ def generate_positions(node_chain: List[NodeBlock], obj_num: int) -> List[Tuple[
     @param obj_num: the number of the instructions that will substitute the non-obfuscated one
     @return: a list of tuples of the type: (node_id, list of lines in which insert the instructions)
     """
-    seed()
+    # seed()
     positions = list()
     # redistribute the promises over the selected nodes
     a = sample(range(0, obj_num), len(node_chain) - 1) + [0, obj_num]
@@ -335,7 +335,7 @@ def obfuscate(cfg: DiGraph, node_id: int = None, target_instr: int = None):
     @param node_id: the id of the node where is collocated the instruction to obfuscate
     @param target_instr: the line of the instruction to obfuscate
     """
-    seed()
+    # seed()
     if node_id is None or target_instr is None:
         extracted = get_immediate_instructions(cfg)
         node_id = extracted[0]
