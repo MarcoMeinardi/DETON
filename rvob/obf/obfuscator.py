@@ -327,7 +327,7 @@ def get_immediate_instructions(cfg) -> Tuple[int, int]:
     return choice(result)
 
 
-def obfuscate(cfg: DiGraph, node_id: int = None, target_instr: int = None):
+def obfuscate(cfg: DiGraph, chain_length: int = None, node_id: int = None, target_instr: int = None):
     """
     this is the main function that, given an instruction, generate the list of promises, convert them into instructions
     and distribute them in as many nodes as possible
@@ -341,8 +341,12 @@ def obfuscate(cfg: DiGraph, node_id: int = None, target_instr: int = None):
         node_id = extracted[0]
         target_instr = extracted[1]
     instruction = cfg.nodes[node_id]["block"][target_instr]
-    max_shift = 3
-    max_logical = 5
+    if chain_length is None:
+        max_shift = randint(1, 10)
+        max_logical = randint(1, 10)
+    else:
+        max_shift = randint(1, chain_length - 1)
+        max_logical = chain_length - max_shift
     promise_chain = generate_derivation_chain(instruction, max_shift, max_logical)
     node_chain = calc_nodes_chain(cfg, node_id, target_instr, instruction.r1)
     target_instr_off = placer(cfg, promise_chain, node_chain, target_instr)
