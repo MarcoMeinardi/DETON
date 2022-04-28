@@ -1,9 +1,9 @@
 import argparse
 from os import path
 import re
-import random
 from ast import literal_eval
 from deton import execute
+from multiprocessing import Pool
 
 def get_args():
     parser = argparse.ArgumentParser(description="Bruteforce of DETON")
@@ -23,7 +23,31 @@ def get_args():
         default='q',
         type=str)
 
+    parser.add_argument(
+        "Threads",
+        metavar="Number of thread to use",
+        help="The number of max thread wanted to be used",
+        nargs='?',
+        default='1',
+        type=int)
+
     return parser.parse_args()
+
+def run_evaluate(input_file, original_lines_num, register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length, iteration, total_iterations):
+    mean_heat, lines_num = evaluate(input_file, register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length)
+    print(f"Executed with: {register_scrumbling} {costant_obfuscation} {garbage_blocks} {garbage_length} ({iteration} / {total_iterations})")
+    print("New mean heat:", mean_heat)
+    print("Overhead introduced:", lines_num - original_lines_num)
+    print()
+    return mean_heat, lines_num, (register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length)
+
+best = None
+def save_if_best(values):
+    global best
+    mean_heat, lines_num, (register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length) = values
+    if best is None or mean_heat > best[0]:
+        best = (mean_heat, lines_num - original_lines_num, (register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length))
+    
 
 def evaluate(input_file, register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length):
     execute(
@@ -42,9 +66,10 @@ def evaluate(input_file, register_scrumbling, costant_obfuscation, garbage_block
 
 
 def main():
-    random.seed(0)
+    global original_lines_num
     args = get_args()
     input_file = args.File
+    threads = args.Threads
 
     original_value, original_lines_num = evaluate(input_file, 0, 0, 0, 0)
     max_overhead = args.Overhead * original_lines_num // 100
@@ -71,8 +96,8 @@ def main():
                 total_iterations += 1
 
     # Try every combination
-    best = (original_value, 0, (0, 0, 0, 0))
     iteration = 0
+    thread_pool = Pool(threads)
     for costant_obfuscation in range(0, max_overhead):
         if costant_obfuscation * costant_chain_length > max_overhead:
             break
@@ -88,33 +113,21 @@ def main():
 
                     register_scrumbling = max_overhead - costant_obfuscation * costant_chain_length - garbage_blocks * garbage_length
                     iteration += 1
-                    print(f"Executing with: {register_scrumbling} {costant_obfuscation} {garbage_blocks} {garbage_length} ({iteration} / {total_iterations})")
-                    
-                    new_value, lines_num = evaluate(input_file, register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length)
-                    overhead = lines_num - original_lines_num
-
-                    print("New mean heat:", new_value)
-                    print("Overhead introduced:", overhead)
-                    print()
-                    if new_value > best[0]:
-                        best = (new_value, overhead, (register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length))
-
+                    thread_pool.apply_async(
+                        run_evaluate,
+                        args = (input_file, original_lines_num, register_scrumbling, costant_obfuscation, garbage_blocks, garbage_length, iteration, total_iterations),
+                        callback = save_if_best
+                    )
 
 
             else:
                 register_scrumbling = max_overhead - costant_obfuscation * costant_chain_length
                 iteration += 1
-                print(f"Executing with: {register_scrumbling} {costant_obfuscation} {0} {0} ({iteration} / {total_iterations})")
-                
-                new_value, lines_num = evaluate(input_file, register_scrumbling, costant_obfuscation, 0, 0)
-                overhead = lines_num - original_lines_num
-
-                print("New mean heat:", new_value)
-                print("Overhead introduced:", overhead)
-                print()
-                if new_value > best[0]:
-                    best = (new_value, overhead, (register_scrumbling, costant_obfuscation, 0, 0))
+                thread_pool.apply_async(run_evaluate, args = (input_file, original_lines_num, register_scrumbling, costant_obfuscation, 0, 0, iteration, total_iterations), callback = save_if_best)
  
+    thread_pool.close()
+    thread_pool.join()
+
     print()
     print("DONE")
     print("Best parameters:")

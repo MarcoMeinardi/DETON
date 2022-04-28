@@ -16,6 +16,7 @@ from rvob.structures import Register
 from rvob.obf.obfuscator import NotEnoughRegisters, NotValidInstruction
 from os import path
 import argparse
+import random
 
 heat_map = None
 heat_file = None
@@ -290,7 +291,7 @@ def apply_techniques(heat, scrambling_repetition, obfuscate_repetition, garbage_
 
 
 def execute(name: str, entry: str, heat: int, scrambling_repetition: int, obfuscate_repetition: int, garbage_repetition: int, garb_size: int, output: str, bench: bool, metric: bool, id: str = 1):
-
+    random.seed(0)
     global heat_map
     global heat_file
     global metrics_file
