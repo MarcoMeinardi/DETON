@@ -262,7 +262,7 @@ def do_garbage(iter_num: int, garb_par: int):
     #print("Garbage failure rate: " + str(failed / iter_num * 100) + "%")
 
 
-def do_obfuscate(iter_num: int, chain_length: int = None):
+def do_obfuscate(iter_num: int, obfuscation_chain_length: int = None):
     """
     this performs the constant obfuscation technique
     @param iter_num: the number of iterations to do
@@ -271,7 +271,7 @@ def do_obfuscate(iter_num: int, chain_length: int = None):
     for t in range(iter_num):
         for z in range(5):
             try:
-                obfuscator.obfuscate(cfg, chain_length)
+                obfuscator.obfuscate(cfg, obfuscation_chain_length)
                 break
             except (NotEnoughRegisters, NotValidInstruction):
                 if z == 4:
@@ -279,18 +279,18 @@ def do_obfuscate(iter_num: int, chain_length: int = None):
     #print("Obfuscate failure rate: " + str(failed / iter_num * 100) + "%")
 
 
-def apply_techniques(heat, scrambling_repetition, obfuscate_repetition, garbage_repetition, garb_par, chain_length):
+def apply_techniques(heat, scrambling_repetition, obfuscate_repetition, obfuscation_chain_length, garbage_repetition, garb_par):
     """
     This function calls all the sub-functions that applies the obfuscation techniques (Scrambling, garbage instructions
     insertion and constants obfuscation)
     """
 
-    do_obfuscate(obfuscate_repetition, chain_length)
+    do_obfuscate(obfuscate_repetition, obfuscation_chain_length)
     do_garbage(garbage_repetition, garb_par)
     do_scrambling(scrambling_repetition, heat)
 
 
-def execute(name: str, entry: str, heat: int, scrambling_repetition: int, obfuscate_repetition: int, garbage_repetition: int, garb_size: int, output: str, bench: bool, metric: bool, id: str = 1, chain_length: int = 0):
+def execute(name: str, entry: str, heat: int, scrambling_repetition: int, obfuscate_repetition: int, obfuscation_chain_length: int, garbage_repetition: int, garb_size: int, output: str, bench: bool, metric: bool, id: str = 1):
     random.seed(0)
     global heat_map
     global heat_file
@@ -342,7 +342,7 @@ def execute(name: str, entry: str, heat: int, scrambling_repetition: int, obfusc
         write_heat(first=True)
 
     # Apply the obfuscation techniques
-    apply_techniques(heat, scrambling_repetition, obfuscate_repetition, garbage_repetition, garb_size, chain_length)
+    apply_techniques(heat, scrambling_repetition, obfuscate_repetition, obfuscation_chain_length, garbage_repetition, garb_size)
 
     # Write the value of the metrics for the obfuscated program
     if metric==True:

@@ -27,13 +27,12 @@ class Configuration:
         )
 
     def evaluate(self):
-        output_name = f"_{self.id % 100}" if isinstance(self.id, int) else f"_{self.id}"
         execute(
             self.input_file, "", 50, 
-            self.register_scrumbling, self.constant_obfuscation, self.garbage_blocks, self.garbage_length,
-            path.dirname(__file__) + '/metrics/output.s', False, True, output_name, self.obfuscation_chain_length
+            self.register_scrumbling, self.constant_obfuscation, self.obfuscation_chain_length, self.garbage_blocks, self.garbage_length,
+            path.dirname(__file__) + '/metrics/output.s', False, True, f"_{self.id}"
         )
-        with open(path.dirname(__file__) + f'/metrics/data_metrics{output_name}.txt') as f:
+        with open(path.dirname(__file__) + f'/metrics/data_metrics_{self.id}.txt') as f:
             data = f.read()
             
         mean_heats = literal_eval(re.search(r"Mean heat after: (\[.*\])", data).group(1))
@@ -112,8 +111,6 @@ def main():
                     if constant_obfuscation * obfuscation_chain_length + garbage_blocks * garbage_length >= max_overhead: break
 
                     total_iterations += 1
-                    if constant_obfuscation == 0: obfuscation_chain_length = 0
-                    if garbage_blocks == 0: garbage_length = 0
 
                     if garbage_blocks == 0: break
             if constant_obfuscation == 0: break
@@ -142,7 +139,7 @@ def main():
                         obfuscation_chain_length, 
                         garbage_blocks, 
                         garbage_length,
-                        iteration
+                        str(iteration % 100)
                     )
                     thread_pool.apply_async(
                         configuration.evaluate,
