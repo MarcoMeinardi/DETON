@@ -78,7 +78,7 @@ def get_args():
 
 def save_if_best(configuration):
     global best, original_configuration, total_iterations
-    print(f"Executed with: {configuration} ({configuration.id} / {total_iterations}")
+    print(f"Executed with: {configuration} ({configuration.id} / {total_iterations})")
     print("New mean heat:", configuration.mean_heat)
     print("Overhead introduced:", configuration.lines_num - original_configuration.lines_num)
     print()
@@ -101,129 +101,47 @@ def main():
     print()
 
     # Calculate total iterations
+    max_overhead += 1
     total_iterations = 0
     for constant_obfuscation in range(0, max_overhead):
-        if constant_obfuscation > max_overhead:
-            break
-        if constant_obfuscation > 0:
-            for obfuscation_chain_length in range(2, 20):
-                if constant_obfuscation * obfuscation_chain_length > max_overhead:
-                    break
-                for garbage_blocks in range(0, max_overhead):
-                    if garbage_blocks > 0:
-                        if constant_obfuscation * obfuscation_chain_length + garbage_blocks > max_overhead:
-                            break
-                        for garbage_length in range(1, max_overhead):
-                            if constant_obfuscation * obfuscation_chain_length + garbage_blocks * garbage_length > max_overhead:
-                                break
-                            total_iterations += 1
-                    else:
-                        total_iterations += 1
-        else:
+        for obfuscation_chain_length in range(2, max(3, max_overhead)):
+            if constant_obfuscation * obfuscation_chain_length >= max_overhead: break
+
             for garbage_blocks in range(0, max_overhead):
-                if garbage_blocks > 0:
-                    if garbage_blocks > max_overhead:
-                        break
-                    for garbage_length in range(1, max_overhead):
-                        if garbage_blocks * garbage_length > max_overhead:
-                            break
-                        total_iterations += 1
-                else:
+                for garbage_length in range(1, max(2, max_overhead)):
+                    if constant_obfuscation * obfuscation_chain_length + garbage_blocks * garbage_length >= max_overhead: break
+
                     total_iterations += 1
+                    if constant_obfuscation == 0: obfuscation_chain_length = 0
+                    if garbage_blocks == 0: garbage_length = 0
+
+                    if garbage_blocks == 0: break
+            if constant_obfuscation == 0: break
 
     # Try every combination
     iteration = 0
     thread_pool = Pool(threads)
+
     for constant_obfuscation in range(0, max_overhead):
-        if constant_obfuscation > max_overhead:
-            break
+        for obfuscation_chain_length in range(2, max(3, max_overhead)):
+            if constant_obfuscation * obfuscation_chain_length >= max_overhead: break
 
-        if constant_obfuscation > 0:
-            for obfuscation_chain_length in range(2, 20):
-                if constant_obfuscation * obfuscation_chain_length > max_overhead:
-                    break
-
-                for garbage_blocks in range(0, max_overhead):
-                    if garbage_blocks > 0:
-                        if constant_obfuscation * obfuscation_chain_length + garbage_blocks > max_overhead:
-                            break
-
-                        for garbage_length in range(1, max_overhead):
-                            if constant_obfuscation * obfuscation_chain_length + garbage_blocks * garbage_length > max_overhead:
-                                break
-
-                            register_scrumbling = max_overhead - constant_obfuscation * obfuscation_chain_length - garbage_blocks * garbage_length
-                            iteration += 1
-                            configuration = Configuration(
-                                input_file, 
-                                register_scrumbling, 
-                                constant_obfuscation, 
-                                obfuscation_chain_length, 
-                                garbage_blocks, 
-                                garbage_length,
-                                iteration
-                            )
-                            thread_pool.apply_async(
-                                configuration.evaluate,
-                                args = (),
-                                callback = save_if_best
-                            )
-
-                    else:
-                        register_scrumbling = max_overhead - constant_obfuscation * obfuscation_chain_length
-                        iteration += 1
-                        configuration = Configuration(
-                            input_file, 
-                            register_scrumbling, 
-                            constant_obfuscation, 
-                            obfuscation_chain_length, 
-                            0, 
-                            0,
-                            iteration
-                        )
-                        thread_pool.apply_async(
-                            configuration.evaluate,
-                            args = (),
-                            callback = save_if_best
-                        )
-        
-        else:
             for garbage_blocks in range(0, max_overhead):
-                if garbage_blocks > 0:
-                    if garbage_blocks > max_overhead:
-                        break
+                for garbage_length in range(1, max(2, max_overhead)):
+                    if constant_obfuscation * obfuscation_chain_length + garbage_blocks * garbage_length >= max_overhead: break
 
-                    for garbage_length in range(1, max_overhead):
-                        if garbage_blocks * garbage_length > max_overhead:
-                            break
+                    if constant_obfuscation == 0: obfuscation_chain_length = 0
+                    if garbage_blocks == 0: garbage_length = 0
 
-                        register_scrumbling = max_overhead - garbage_blocks * garbage_length
-                        iteration += 1
-                        configuration = Configuration(
-                            input_file, 
-                            register_scrumbling, 
-                            0, 
-                            0, 
-                            garbage_blocks, 
-                            garbage_length,
-                            iteration
-                        )
-                        thread_pool.apply_async(
-                            configuration.evaluate,
-                            args = (),
-                            callback = save_if_best
-                        )
-
-                else:
-                    register_scrumbling = max_overhead
+                    register_scrumbling = max_overhead - constant_obfuscation * obfuscation_chain_length - garbage_blocks * garbage_length
                     iteration += 1
                     configuration = Configuration(
                         input_file, 
                         register_scrumbling, 
-                        0, 
-                        0, 
-                        0, 
-                        0,
+                        constant_obfuscation, 
+                        obfuscation_chain_length, 
+                        garbage_blocks, 
+                        garbage_length,
                         iteration
                     )
                     thread_pool.apply_async(
@@ -231,6 +149,9 @@ def main():
                         args = (),
                         callback = save_if_best
                     )
+
+                    if garbage_blocks == 0: break
+            if constant_obfuscation == 0: break
 
 
     thread_pool.close()
