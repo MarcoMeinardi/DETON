@@ -27,18 +27,23 @@ class Configuration:
         )
 
     def evaluate(self):
+        if isinstance(self.id, int):
+            output_name = str(self.id % 20) # to avoid generating thousands of files, but also avoid file collision in parallel threads
+        else:
+            output_name = self.id
+
         execute(
             self.input_file, "", 50, 
             self.register_scrumbling, self.constant_obfuscation, self.obfuscation_chain_length, self.garbage_blocks, self.garbage_length,
-            path.dirname(__file__) + '/metrics/output.s', False, True, f"_{self.id}"
+            path.dirname(__file__) + f"/metrics/output_{output_name}.s", False, True, f"_{output_name}"
         )
-        with open(path.dirname(__file__) + f'/metrics/data_metrics_{self.id}.txt') as f:
+        with open(path.dirname(__file__) + f"/metrics/data_metrics_{output_name}.txt") as f:
             data = f.read()
             
         mean_heats = literal_eval(re.search(r"Mean heat after: (\[.*\])", data).group(1))
         self.mean_heat = sum(mean_heats) / 32
 
-        with open(path.dirname(__file__) + '/metrics/output.s') as f:
+        with open(path.dirname(__file__) + f"/metrics/output_{output_name}.s") as f:
             self.lines_num = f.read().count("\n")
         
         return self
@@ -52,7 +57,7 @@ def get_args():
 
     parser.add_argument(
         "Overhead",
-        metavar="max overhead value",
+        metavar="Max overhead value",
         help="The maximum Overhead value wanted in % compared to the original file",
         default='50',
         type=int)
@@ -61,7 +66,6 @@ def get_args():
         "File",
         metavar="File path input",
         help="The path of the file in .json format to process",
-        nargs='?',
         default='q',
         type=str)
 
@@ -139,7 +143,7 @@ def main():
                         obfuscation_chain_length, 
                         garbage_blocks, 
                         garbage_length,
-                        str(iteration % 100)
+                        iteration
                     )
                     thread_pool.apply_async(
                         configuration.evaluate,
@@ -156,7 +160,7 @@ def main():
 
     print()
     print("DONE")
-    print("-" * 30)
+    print("-" * 40)
     print("Best parameters:")
     print("Register scrambling:", best.register_scrumbling)
     print("Constant obfuscation:", best.constant_obfuscation)
@@ -167,7 +171,7 @@ def main():
     print("Original mean heat:", original_configuration.mean_heat)
     print(f"Best mean heat: {best.mean_heat} ({best.mean_heat / original_configuration.mean_heat * 100:.3f} %)")
     print(f"Overhead introduced: {best.lines_num - original_configuration.lines_num} ({(best.lines_num - original_configuration.lines_num) / original_configuration.lines_num * 100:.3f} %)")
-    print("-" * 30)
+    print("-" * 40)
 
     # Save best run
     best.id = "best"

@@ -1,7 +1,7 @@
 from enum import Enum, auto
 from typing import Tuple, List, Optional, NamedTuple, Union
-from secrets import randbits
-from random import seed, choices, sample, randrange
+# from secrets import randbits
+from random import seed, choices, sample, randrange, getrandbits
 from BitVector import BitVector
 
 from rep.base import Instruction
@@ -203,7 +203,7 @@ def logic_ori_obf(goal: Goal) -> Tuple[Promise, Goal]:
     The value used for obfuscation is derived from high-quality entropy sources.
     """
 
-    noise = randbits(goal.const.size)
+    noise = getrandbits(goal.const.size)
     immediate = goal.const.int_val
     return (Promise(ALOps.ORI, goal.reg, _next_reg_placeholder(goal.reg), None,
                     Instruction.ImmediateConstant(goal.const.size, None, immediate & ~noise)),
@@ -219,7 +219,7 @@ def logic_andi_obf(goal: Goal) -> Tuple[Promise, Goal]:
     The value used for obfuscation is derived from high-quality entropy sources.
     """
 
-    noise = randbits(goal.const.size)
+    noise = getrandbits(goal.const.size)
     immediate = goal.const.int_val
     return (Promise(ALOps.ANDI, goal.reg, _next_reg_placeholder(goal.reg), None,
                     Instruction.ImmediateConstant(goal.const.size, None, immediate | ~noise)),
@@ -235,7 +235,7 @@ def logic_xori_obf(goal: Goal) -> Tuple[Promise, Goal]:
     The value used for obfuscation is derived from high-quality entropy sources.
     """
 
-    noise = randbits(goal.const.size)
+    noise = getrandbits(goal.const.size)
     immediate = goal.const.int_val
     return (Promise(ALOps.XORI, goal.reg, _next_reg_placeholder(goal.reg), None,
                     Instruction.ImmediateConstant(goal.const.size, None, immediate ^ noise)),
