@@ -1,6 +1,7 @@
 import argparse
 from os import path
 import re
+import json
 from ast import literal_eval
 from deton import execute
 from multiprocessing import Pool
@@ -45,7 +46,7 @@ class Configuration:
 
         with open(path.dirname(__file__) + f"/metrics/output_{output_name}.s") as f:
             self.lines_num = f.read().count("\n")
-        
+
         return self
 
     def __str__(self):
@@ -77,23 +78,36 @@ def get_args():
         default='1',
         type=int)
 
+    parser.add_argument(
+        "Configurations_file",
+        metavar="File where to save configurations",
+        help="The path of the file where all the attempted configurations should be saved in .json format",
+        nargs='?',
+        default='/metrics/configurations.json',
+        type=str)
+
     return parser.parse_args()
 
 def save_if_best(configuration):
-    global best, original_configuration, total_iterations
+    global best, original_configuration, total_iterations, all_configurations
     print(f"Executed with: {configuration} ({configuration.id} / {total_iterations})")
     print("New mean heat:", configuration.mean_heat)
     print("Overhead introduced:", configuration.lines_num - original_configuration.lines_num)
     print()
     if configuration.mean_heat > best.mean_heat:
         best = configuration
+
+    configuration_dict = configuration.__dict__.copy()
+    del configuration_dict["input_file"]
+    all_configurations["all"].append(configuration_dict)
     
 
 def main():
-    global best, original_configuration, total_iterations
+    global best, original_configuration, total_iterations, all_configurations
     args = get_args()
     input_file = args.File
     threads = args.Threads
+    configurations_file = args.Configurations_file
 
     original_configuration = Configuration(input_file, 0, 0, 0, 0, 0, "original")
     original_configuration.evaluate()
@@ -102,6 +116,14 @@ def main():
     print("Max absolute overhead:", max_overhead)
     print("Original mean heat:", original_configuration.mean_heat)
     print()
+    
+    original_configuration_dict = original_configuration.__dict__.copy()
+    del original_configuration_dict["input_file"]
+    all_configurations = {
+        "file": input_file,
+        "original": original_configuration_dict,
+        "all": []
+    }
 
     # Calculate total iterations
     max_overhead += 1
@@ -177,6 +199,13 @@ def main():
     best.id = "best"
     best.evaluate()
 
+    best_configuration_dict = best.__dict__.copy()
+    del best_configuration_dict["input_file"]
+    all_configurations["best"] = best_configuration_dict
+    all_configurations["all"].sort(key = lambda x: x["id"])
+
+    with open(path.dirname(__file__) + configurations_file, "w") as f:
+        f.write(json.dumps(all_configurations))
 
 if __name__ == "__main__":
     main()
