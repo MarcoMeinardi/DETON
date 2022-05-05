@@ -3,13 +3,14 @@ from os import path
 import re
 import json
 from ast import literal_eval
+
 from deton import execute
 from multiprocessing import Pool
 
 
 class Configuration:
-    def __init__(self, input_file, register_scrumbling, constant_obfuscation, obfuscation_chain_length, garbage_blocks, garbage_length, id):
-        self.input_file = input_file
+    def __init__(self, input_data, register_scrumbling, constant_obfuscation, obfuscation_chain_length, garbage_blocks, garbage_length, id):
+        self.input_data = input_data
         self.register_scrumbling = register_scrumbling
         self.constant_obfuscation = constant_obfuscation
         self.obfuscation_chain_length = obfuscation_chain_length
@@ -19,7 +20,7 @@ class Configuration:
 
     def get_parameters(self):
         return (
-            self.input_file, 
+            self.input_data, 
             self.register_scrumbling, 
             self.constant_obfuscation, 
             self.obfuscation_chain_length, 
@@ -34,7 +35,7 @@ class Configuration:
             output_name = self.id
 
         execute(
-            self.input_file, "", 50, 
+            self.input_data[0], self.input_data[1], 50, 
             self.register_scrumbling, self.constant_obfuscation, self.obfuscation_chain_length, self.garbage_blocks, self.garbage_length,
             path.dirname(__file__) + f"/metrics/output_{output_name}.s", False, True, f"_{output_name}"
         )
@@ -83,7 +84,7 @@ def get_args():
         metavar="File where to save configurations",
         help="The path of the file where all the attempted configurations should be saved in .json format",
         nargs='?',
-        default='/metrics/configurations.json',
+        default=path.dirname(__file__) + '/metrics/configurations.json',
         type=str)
 
     return parser.parse_args()
@@ -98,7 +99,7 @@ def save_if_best(configuration):
         best = configuration
 
     configuration_dict = configuration.__dict__.copy()
-    del configuration_dict["input_file"]
+    del configuration_dict["input_data"]
     all_configurations["all"].append(configuration_dict)
     
 
@@ -108,8 +109,13 @@ def main():
     input_file = args.File
     threads = args.Threads
     configurations_file = args.Configurations_file
+    no_main = {'patricia': 'bit', 'sha': 'sha_transform', 'bitarray': 'alloc_bit_array', 'idea': 'mulInv', 'rsa': 'mpi_add'}
+    if path.basename(input_file).split(".")[0] in no_main:
+        input_data = (input_file, no_main[path.basename(input_file).split(".")[0]])
+    else:
+        input_data = (input_file, '')
 
-    original_configuration = Configuration(input_file, 0, 0, 0, 0, 0, "original")
+    original_configuration = Configuration(input_data, 0, 0, 0, 0, 0, "original")
     original_configuration.evaluate()
     best = original_configuration
     max_overhead = args.Overhead * original_configuration.lines_num // 100
@@ -118,9 +124,9 @@ def main():
     print()
     
     original_configuration_dict = original_configuration.__dict__.copy()
-    del original_configuration_dict["input_file"]
+    del original_configuration_dict["input_data"]
     all_configurations = {
-        "file": input_file,
+        "file": input_data[0],
         "original": original_configuration_dict,
         "all": []
     }
@@ -156,10 +162,10 @@ def main():
                     if constant_obfuscation == 0: obfuscation_chain_length = 0
                     if garbage_blocks == 0: garbage_length = 0
 
-                    register_scrumbling = max_overhead - constant_obfuscation * obfuscation_chain_length - garbage_blocks * garbage_length
+                    register_scrumbling = max_overhead - constant_obfuscation * obfuscation_chain_length - garbage_blocks * garbage_length - 1
                     iteration += 1
                     configuration = Configuration(
-                        input_file, 
+                        input_data, 
                         register_scrumbling, 
                         constant_obfuscation, 
                         obfuscation_chain_length, 
@@ -200,11 +206,11 @@ def main():
     best.evaluate()
 
     best_configuration_dict = best.__dict__.copy()
-    del best_configuration_dict["input_file"]
+    del best_configuration_dict["input_data"]
     all_configurations["best"] = best_configuration_dict
     all_configurations["all"].sort(key = lambda x: x["id"])
 
-    with open(path.dirname(__file__) + configurations_file, "w") as f:
+    with open(configurations_file, "w") as f:
         f.write(json.dumps(all_configurations))
 
 if __name__ == "__main__":
