@@ -118,7 +118,7 @@ def main():
     original_configuration = Configuration(input_data, 0, 0, 0, 0, 0, "original")
     original_configuration.evaluate()
     best = original_configuration
-    max_overhead = args.Overhead * original_configuration.lines_num // 100
+    max_overhead = args.Overhead # * original_configuration.lines_num // 100
     print("Max absolute overhead:", max_overhead)
     print("Original mean heat:", original_configuration.mean_heat)
     print()
@@ -130,27 +130,11 @@ def main():
         "original": original_configuration_dict,
         "all": []
     }
+    todo_configurations = []
 
     # Calculate total iterations
     max_overhead += 1
-    total_iterations = 0
-    for constant_obfuscation in range(0, max_overhead):
-        for obfuscation_chain_length in range(2, max(3, max_overhead)):
-            if constant_obfuscation * obfuscation_chain_length >= max_overhead: break
-
-            for garbage_blocks in range(0, max_overhead):
-                for garbage_length in range(1, max(2, max_overhead)):
-                    if constant_obfuscation * obfuscation_chain_length + garbage_blocks * garbage_length >= max_overhead: break
-
-                    total_iterations += 1
-
-                    if garbage_blocks == 0: break
-            if constant_obfuscation == 0: break
-
-    # Try every combination
     iteration = 0
-    thread_pool = Pool(threads)
-
     for constant_obfuscation in range(0, max_overhead):
         for obfuscation_chain_length in range(2, max(3, max_overhead)):
             if constant_obfuscation * obfuscation_chain_length >= max_overhead: break
@@ -173,14 +157,54 @@ def main():
                         garbage_length,
                         iteration
                     )
-                    thread_pool.apply_async(
-                        configuration.evaluate,
-                        args = (),
-                        callback = save_if_best
-                    )
+                    todo_configurations.append(configuration)
 
                     if garbage_blocks == 0: break
             if constant_obfuscation == 0: break
+
+    total_iterations = iteration
+    
+    # Try every combination
+    iteration = 0
+    thread_pool = Pool(threads)
+
+    for configuration in todo_configurations:
+        thread_pool.apply_async(
+            configuration.evaluate,
+            args = (),
+            callback = save_if_best
+        )
+
+    # for constant_obfuscation in range(0, max_overhead):
+    #     for obfuscation_chain_length in range(2, max(3, max_overhead)):
+    #         if constant_obfuscation * obfuscation_chain_length >= max_overhead: break
+
+    #         for garbage_blocks in range(0, max_overhead):
+    #             for garbage_length in range(1, max(2, max_overhead)):
+    #                 if constant_obfuscation * obfuscation_chain_length + garbage_blocks * garbage_length >= max_overhead: break
+
+    #                 if constant_obfuscation == 0: obfuscation_chain_length = 0
+    #                 if garbage_blocks == 0: garbage_length = 0
+
+    #                 register_scrumbling = max_overhead - constant_obfuscation * obfuscation_chain_length - garbage_blocks * garbage_length - 1
+    #                 iteration += 1
+    #                 configuration = Configuration(
+    #                     input_data, 
+    #                     register_scrumbling, 
+    #                     constant_obfuscation, 
+    #                     obfuscation_chain_length, 
+    #                     garbage_blocks, 
+    #                     garbage_length,
+    #                     iteration
+    #                 )
+    #                 thread_pool.apply_async(
+    #                     configuration.evaluate,
+    #                     args = (),
+    #                     callback = save_if_best
+    #                 )
+
+    #                 if garbage_blocks == 0: break
+    #         if constant_obfuscation == 0: break
 
 
     thread_pool.close()
