@@ -12,6 +12,7 @@ log_dict = {
     "ERRORS": ERRORS
 }
 
+# TODO: we all love colors :D
 class Logger:
     def __init__(self, level):
         self.log_level = level

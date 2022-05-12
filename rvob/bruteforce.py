@@ -7,6 +7,7 @@ import time
 
 from logger import *
 from configuration import Configuration
+from worker import Worker
 
 def get_args():
     parser = argparse.ArgumentParser(description="Bruteforce of DETON")
@@ -19,10 +20,25 @@ def get_args():
         type=str)
 
     parser.add_argument(
-        "-o", "--overhead",
-        metavar="Max overhead value",
-        help="The maximum Overhead value wanted in %% compared to the original file",
+        "-w", "--optimize",
+        metavar="What to optimize",
+        help="If you want to optimize for overhead or heat",
+        choices=["heat", "overhead"],
         required=True,
+        type=str)
+
+    parser.add_argument(
+        "-O", "--overhead",
+        metavar="Max overhead value or overhead upper bound",
+        help="The maximum Overhead value wanted, in percentage, compared to the original file or the upper bound for the overhead optimization",
+        required=True,
+        type=int)
+
+    parser.add_argument(
+        "-H", "--heat",
+        metavar="Target heat",
+        help="The target mean heat, in percentage, to search for, while minimizing the overhead (required only if optimizing for overhead)",
+        required=False,
         type=int)
 
     parser.add_argument(
@@ -34,7 +50,7 @@ def get_args():
         type=int)
 
     parser.add_argument(
-        "-out", "--output",
+        "-o", "--output",
         metavar="output file",
         help="The path of the file where all the attempted configurations should be saved in .json format",
         required=False,
@@ -105,7 +121,7 @@ def main():
     args.log_level = args.log_level.upper()
     if args.log_level not in log_dict:
         Log.error(f"Logging level {args.log_level} doesn't exists")
-        quit()
+        return
     else:
         Log.log_level = log_dict[args.log_level]
 
@@ -120,12 +136,8 @@ def main():
 
     original_configuration = Configuration(input_data, 0, 0, 0, 0, 0, "original")
     original_configuration.evaluate()
-    best = original_configuration
-    max_overhead = args.overhead # * original_configuration.lines_num // 100
-    Log.info("Max absolute overhead:", max_overhead)
     Log.info("Original mean heat:", original_configuration.mean_heat)
-    Log.info()
-    
+
     original_configuration_dict = original_configuration.__dict__.copy()
     del original_configuration_dict["input_data"]
     all_configurations = {
@@ -137,22 +149,60 @@ def main():
         "all": []
     }
 
-    todo_configurations = []
-    total_iterations = preprocess_configurations(todo_configurations, max_overhead, input_data)
-    
-    # Try every combination
-    iteration = 0
-    thread_pool = Pool(threads)
+    max_overhead = args.overhead * original_configuration.lines_num // 100
+    if args.optimize == "heat":
+        Log.info("Max absolute overhead:", max_overhead)
+        best = original_configuration
 
-    for configuration in todo_configurations:
-        thread_pool.apply_async(
-            configuration.evaluate,
-            args = (),
-            callback = save_if_best
+        todo_configurations = []
+        total_iterations = preprocess_configurations(todo_configurations, max_overhead, input_data)
+
+        worker = Worker(
+            configurations=todo_configurations,
+            optimize_overhead=False,
+            target_heat=None,
+            original_configuration=original_configuration,
+            configurations_backup=all_configurations["all"],
+            n_threads=threads,
+            Log=Log
         )
+        best = worker.run()
+    else:
+        if args.heat is None:
+            Log.error("Target heat must be specified while optimizing for overhead")
+            return
+        best = None
+        target_heat = args.heat * original_configuration.mean_heat / 100
+        Log.info(f"Target heat: {target_heat}")
+        left = 0
+        right = max_overhead + 1
+        while left <= right:
+            actual_overhead = left + (right - left) // 2
+            Log.info(f"Bounds: ({left}:{right} -> {actual_overhead})")  #should be debug, but debug is too verbose
+            todo_configurations = []
+            total_iterations = preprocess_configurations(todo_configurations, actual_overhead, input_data)
 
-    thread_pool.close()
-    thread_pool.join()
+            worker = Worker(
+                configurations=todo_configurations,
+                optimize_overhead=True,
+                target_heat=target_heat,
+                original_configuration=original_configuration,
+                configurations_backup=all_configurations["all"],
+                n_threads=threads,
+                Log=Log
+            )
+            maybe_best = worker.run()
+            if maybe_best is None:
+                left = actual_overhead + 1
+            else:
+                best = maybe_best  # this might not be the best solution for this overhead, it may be worth running the whole process with this overhead (todo: cache already done configurations)
+                right = actual_overhead - 1
+
+        if best is None:
+            Log.error("Either you lied to me :D or DETON is too stupidly random")
+            Log.error(f"No configuration found with (absolute) heat >= {target_heat} and (absolute) overhead <= {max_overhead}")
+            return
+
 
     stop_time = time.time()
     total_time = stop_time - start_time
