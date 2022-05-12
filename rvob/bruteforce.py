@@ -1,122 +1,51 @@
 import argparse
 from os import path
-import re
 import json
 from ast import literal_eval
-
-from deton import execute
 from multiprocessing import Pool
+import time
 
-DEBUG = 0
-INFO = 1
-WARNINGS = 2
-ERRORS = 3
-log_dict = {
-    "DEBUG": DEBUG,
-    "INFO": INFO,
-    "WARNING": WARNINGS,
-    "WARNINGS": WARNINGS,
-    "WARN": WARNINGS,
-    "ERROR": ERRORS,
-    "ERRORS": ERRORS
-}
-global log_level
-
-class Configuration:
-    def __init__(self, input_data, register_scrumbling, constant_obfuscation, obfuscation_chain_length, garbage_blocks, garbage_length, id):
-        self.input_data = input_data
-        self.register_scrumbling = register_scrumbling
-        self.constant_obfuscation = constant_obfuscation
-        self.obfuscation_chain_length = obfuscation_chain_length
-        self.garbage_blocks = garbage_blocks
-        self.garbage_length = garbage_length
-        self.id = id
-
-    def get_parameters(self):
-        return (
-            self.input_data, 
-            self.register_scrumbling, 
-            self.constant_obfuscation, 
-            self.obfuscation_chain_length, 
-            self.garbage_blocks, 
-            self.garbage_length
-        )
-
-    def evaluate(self):
-        if isinstance(self.id, int):
-            output_name = str(self.id % 20) # to avoid generating thousands of files, but also avoid file collision in parallel threads
-        else:
-            output_name = self.id
-
-        execute(
-            self.input_data[0], self.input_data[1], 50, 
-            self.register_scrumbling, self.constant_obfuscation, self.obfuscation_chain_length, self.garbage_blocks, self.garbage_length,
-            path.dirname(__file__) + f"/metrics/output_{output_name}.s", False, True, f"_{output_name}"
-        )
-        with open(path.dirname(__file__) + f"/metrics/data_metrics_{output_name}.txt") as f:
-            data = f.read()
-            
-        mean_heats = tuple(literal_eval(re.search(r"Mean heat after: (\[.*\])", data).group(1)))
-        self.mean_heat = sum(mean_heats) / len(mean_heats)
-        self.mean_heats = mean_heats
-
-        with open(path.dirname(__file__) + f"/metrics/output_{output_name}.s") as f:
-            self.lines_num = f.read().count("\n")
-
-        return self
-
-    def __str__(self):
-        return f"{self.register_scrumbling} {self.constant_obfuscation} {self.obfuscation_chain_length} {self.garbage_blocks} {self.garbage_length}"
-
-class Log:
-    def debug(*args):
-        if log_level <= DEBUG:
-            print(*args)
-    def info(*args):
-        if log_level <= INFO:
-            print(*args)
-    def warning(*args):
-        if log_level <= WARNINGS:
-            print(*args)
-    def error(*args):
-        if log_level <= ERRORS:
-            print(*args)
-
+from logger import *
+from configuration import Configuration
 
 def get_args():
     parser = argparse.ArgumentParser(description="Bruteforce of DETON")
 
     parser.add_argument(
-        "File",
-        metavar="File path input",
+        "-f", "-in", "--file",
+        metavar="input file",
         help="The path of the file in .json format to process",
+        required=True,
         type=str)
 
     parser.add_argument(
-        "Overhead",
+        "-o", "--overhead",
         metavar="Max overhead value",
-        help="The maximum Overhead value wanted in % compared to the original file",
-        default='50',
+        help="The maximum Overhead value wanted in %% compared to the original file",
+        required=True,
         type=int)
 
     parser.add_argument(
-        "Threads",
+        "-t", "--threads",
         metavar="Number of thread to use",
         help="The number of max thread wanted to be used",
+        required=False,
         default='1',
         type=int)
 
     parser.add_argument(
-        "Configurations_file",
-        metavar="File where to save configurations",
+        "-out", "--output",
+        metavar="output file",
         help="The path of the file where all the attempted configurations should be saved in .json format",
+        required=False,
         default=path.dirname(__file__) + '/metrics/configurations.json',
         type=str)
 
     parser.add_argument(
-        "Log_level",
-        metavar="Level of logging",
+        "-l", "--log-level",
+        metavar="logging level",
         help="The verbosity of the logs (debug, info, warning, error)",
+        required=False,
         default='debug',
         type=str)
 
@@ -135,45 +64,7 @@ def save_if_best(configuration):
     del configuration_dict["input_data"]
     all_configurations["all"].append(configuration_dict)
     
-
-def main():
-    global best, original_configuration, total_iterations, all_configurations, log_level
-
-    args = get_args()
-    args.Log_level = args.Log_level.upper()
-    if args.Log_level not in log_dict:
-        log_level = ERRORS
-        Log.error(f"Logging level {args.Log_level} doesn't exists")
-        quit()
-    else:
-        log_level = log_dict[args.Log_level]
-
-    input_file = args.File
-    threads = args.Threads
-    configurations_file = args.Configurations_file
-    no_main = {'patricia': 'bit', 'sha': 'sha_transform', 'bitarray': 'alloc_bit_array', 'idea': 'mulInv', 'rsa': 'mpi_add'}
-    if path.basename(input_file).split(".")[0] in no_main:
-        input_data = (input_file, no_main[path.basename(input_file).split(".")[0]])
-    else:
-        input_data = (input_file, '')
-
-    original_configuration = Configuration(input_data, 0, 0, 0, 0, 0, "original")
-    original_configuration.evaluate()
-    best = original_configuration
-    max_overhead = args.Overhead # * original_configuration.lines_num // 100
-    Log.info("Max absolute overhead:", max_overhead)
-    Log.info("Original mean heat:", original_configuration.mean_heat)
-    Log.info()
-    
-    original_configuration_dict = original_configuration.__dict__.copy()
-    del original_configuration_dict["input_data"]
-    all_configurations = {
-        "file": input_data[0],
-        "original": original_configuration_dict,
-        "all": []
-    }
-    todo_configurations = []
-
+def preprocess_configurations(todo_configurations, max_overhead, input_data):
     # Calculate total iterations
     max_overhead += 1
     iteration = 0
@@ -204,7 +95,50 @@ def main():
                     if garbage_blocks == 0: break
             if constant_obfuscation == 0: break
 
-    total_iterations = iteration
+    return iteration
+
+def main():
+    start_time = time.time()
+    global best, original_configuration, total_iterations, all_configurations
+    args = get_args()
+
+    args.log_level = args.log_level.upper()
+    if args.log_level not in log_dict:
+        Log.error(f"Logging level {args.log_level} doesn't exists")
+        quit()
+    else:
+        Log.log_level = log_dict[args.log_level]
+
+    input_file = args.file
+    threads = args.threads
+    configurations_file = args.output
+    no_main = {'patricia': 'bit', 'sha': 'sha_transform', 'bitarray': 'alloc_bit_array', 'idea': 'mulInv', 'rsa': 'mpi_add'}
+    if path.basename(input_file).split(".")[0] in no_main:
+        input_data = (input_file, no_main[path.basename(input_file).split(".")[0]])
+    else:
+        input_data = (input_file, '')
+
+    original_configuration = Configuration(input_data, 0, 0, 0, 0, 0, "original")
+    original_configuration.evaluate()
+    best = original_configuration
+    max_overhead = args.overhead # * original_configuration.lines_num // 100
+    Log.info("Max absolute overhead:", max_overhead)
+    Log.info("Original mean heat:", original_configuration.mean_heat)
+    Log.info()
+    
+    original_configuration_dict = original_configuration.__dict__.copy()
+    del original_configuration_dict["input_data"]
+    all_configurations = {
+        "best": None,
+        "original": original_configuration_dict,
+        "file": input_data[0],
+        "total_time": -1,
+        "threads": threads,
+        "all": []
+    }
+
+    todo_configurations = []
+    total_iterations = preprocess_configurations(todo_configurations, max_overhead, input_data)
     
     # Try every combination
     iteration = 0
@@ -217,12 +151,13 @@ def main():
             callback = save_if_best
         )
 
-
     thread_pool.close()
     thread_pool.join()
 
+    stop_time = time.time()
+    total_time = stop_time - start_time
     Log.info()
-    Log.info("DONE")
+    Log.info(f"DONE (Total time: {total_time:.3f} s)")
     Log.info("-" * 40)
     Log.info("Best parameters:")
     Log.info("Register scrambling:", best.register_scrumbling)
@@ -243,6 +178,7 @@ def main():
     best_configuration_dict = best.__dict__.copy()
     del best_configuration_dict["input_data"]
     all_configurations["best"] = best_configuration_dict
+    all_configurations["total_time"] = total_time
     all_configurations["all"].sort(key = lambda x: x["id"])
 
     with open(configurations_file, "w") as f:
