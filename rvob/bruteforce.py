@@ -7,6 +7,20 @@ from ast import literal_eval
 from deton import execute
 from multiprocessing import Pool
 
+DEBUG = 0
+INFO = 1
+WARNINGS = 2
+ERRORS = 3
+log_dict = {
+    "DEBUG": DEBUG,
+    "INFO": INFO,
+    "WARNING": WARNINGS,
+    "WARNINGS": WARNINGS,
+    "WARN": WARNINGS,
+    "ERROR": ERRORS,
+    "ERRORS": ERRORS
+}
+global log_level
 
 class Configuration:
     def __init__(self, input_data, register_scrumbling, constant_obfuscation, obfuscation_chain_length, garbage_blocks, garbage_length, id):
@@ -54,6 +68,20 @@ class Configuration:
     def __str__(self):
         return f"{self.register_scrumbling} {self.constant_obfuscation} {self.obfuscation_chain_length} {self.garbage_blocks} {self.garbage_length}"
 
+class Log:
+    def debug(*args):
+        if log_level <= DEBUG:
+            print(*args)
+    def info(*args):
+        if log_level <= INFO:
+            print(*args)
+    def warning(*args):
+        if log_level <= WARNINGS:
+            print(*args)
+    def error(*args):
+        if log_level <= ERRORS:
+            print(*args)
+
 
 def get_args():
     parser = argparse.ArgumentParser(description="Bruteforce of DETON")
@@ -75,7 +103,6 @@ def get_args():
         "Threads",
         metavar="Number of thread to use",
         help="The number of max thread wanted to be used",
-        nargs='?',
         default='1',
         type=int)
 
@@ -83,18 +110,24 @@ def get_args():
         "Configurations_file",
         metavar="File where to save configurations",
         help="The path of the file where all the attempted configurations should be saved in .json format",
-        nargs='?',
         default=path.dirname(__file__) + '/metrics/configurations.json',
+        type=str)
+
+    parser.add_argument(
+        "Log_level",
+        metavar="Level of logging",
+        help="The verbosity of the logs (debug, info, warning, error)",
+        default='debug',
         type=str)
 
     return parser.parse_args()
 
 def save_if_best(configuration):
     global best, original_configuration, total_iterations, all_configurations
-    print(f"Executed with: {configuration} ({configuration.id} / {total_iterations})")
-    print("New mean heat:", configuration.mean_heat)
-    print("Overhead introduced:", configuration.lines_num - original_configuration.lines_num)
-    print()
+    Log.debug(f"Executed with: {configuration} ({configuration.id} / {total_iterations})")
+    Log.debug("New mean heat:", configuration.mean_heat)
+    Log.debug("Overhead introduced:", configuration.lines_num - original_configuration.lines_num)
+    Log.debug()
     if configuration.mean_heat > best.mean_heat:
         best = configuration
 
@@ -104,8 +137,17 @@ def save_if_best(configuration):
     
 
 def main():
-    global best, original_configuration, total_iterations, all_configurations
+    global best, original_configuration, total_iterations, all_configurations, log_level
+
     args = get_args()
+    args.Log_level = args.Log_level.upper()
+    if args.Log_level not in log_dict:
+        log_level = ERRORS
+        Log.error(f"Logging level {args.Log_level} doesn't exists")
+        quit()
+    else:
+        log_level = log_dict[args.Log_level]
+
     input_file = args.File
     threads = args.Threads
     configurations_file = args.Configurations_file
@@ -118,10 +160,10 @@ def main():
     original_configuration = Configuration(input_data, 0, 0, 0, 0, 0, "original")
     original_configuration.evaluate()
     best = original_configuration
-    max_overhead = args.Overhead * original_configuration.lines_num // 100
-    print("Max absolute overhead:", max_overhead)
-    print("Original mean heat:", original_configuration.mean_heat)
-    print()
+    max_overhead = args.Overhead # * original_configuration.lines_num // 100
+    Log.info("Max absolute overhead:", max_overhead)
+    Log.info("Original mean heat:", original_configuration.mean_heat)
+    Log.info()
     
     original_configuration_dict = original_configuration.__dict__.copy()
     del original_configuration_dict["input_data"]
@@ -179,20 +221,20 @@ def main():
     thread_pool.close()
     thread_pool.join()
 
-    print()
-    print("DONE")
-    print("-" * 40)
-    print("Best parameters:")
-    print("Register scrambling:", best.register_scrumbling)
-    print("Constant obfuscation:", best.constant_obfuscation)
-    print("Obfuscation chain length:", best.obfuscation_chain_length)
-    print("Garbage blocks:", best.garbage_blocks)
-    print("Garbage length:", best.garbage_length)
-    print()
-    print("Original mean heat:", original_configuration.mean_heat)
-    print(f"Best mean heat: {best.mean_heat} ({best.mean_heat / original_configuration.mean_heat * 100:.3f} %)")
-    print(f"Overhead introduced: {best.lines_num - original_configuration.lines_num} ({(best.lines_num - original_configuration.lines_num) / original_configuration.lines_num * 100:.3f} %)")
-    print("-" * 40)
+    Log.info()
+    Log.info("DONE")
+    Log.info("-" * 40)
+    Log.info("Best parameters:")
+    Log.info("Register scrambling:", best.register_scrumbling)
+    Log.info("Constant obfuscation:", best.constant_obfuscation)
+    Log.info("Obfuscation chain length:", best.obfuscation_chain_length)
+    Log.info("Garbage blocks:", best.garbage_blocks)
+    Log.info("Garbage length:", best.garbage_length)
+    Log.info()
+    Log.info("Original mean heat:", original_configuration.mean_heat)
+    Log.info(f"Best mean heat: {best.mean_heat} ({best.mean_heat / original_configuration.mean_heat * 100:.3f} %)")
+    Log.info(f"Overhead introduced: {best.lines_num - original_configuration.lines_num} ({(best.lines_num - original_configuration.lines_num) / original_configuration.lines_num * 100:.3f} %)")
+    Log.info("-" * 40)
 
     # Save best run
     best.id = "best"
