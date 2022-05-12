@@ -42,8 +42,9 @@ class Configuration:
         with open(path.dirname(__file__) + f"/metrics/data_metrics_{output_name}.txt") as f:
             data = f.read()
             
-        mean_heats = literal_eval(re.search(r"Mean heat after: (\[.*\])", data).group(1))
-        self.mean_heat = sum(mean_heats) / 32
+        mean_heats = tuple(literal_eval(re.search(r"Mean heat after: (\[.*\])", data).group(1)))
+        self.mean_heat = sum(mean_heats) / len(mean_heats)
+        self.mean_heats = mean_heats
 
         with open(path.dirname(__file__) + f"/metrics/output_{output_name}.s") as f:
             self.lines_num = f.read().count("\n")
@@ -58,18 +59,17 @@ def get_args():
     parser = argparse.ArgumentParser(description="Bruteforce of DETON")
 
     parser.add_argument(
+        "File",
+        metavar="File path input",
+        help="The path of the file in .json format to process",
+        type=str)
+
+    parser.add_argument(
         "Overhead",
         metavar="Max overhead value",
         help="The maximum Overhead value wanted in % compared to the original file",
         default='50',
         type=int)
-
-    parser.add_argument(
-        "File",
-        metavar="File path input",
-        help="The path of the file in .json format to process",
-        default='q',
-        type=str)
 
     parser.add_argument(
         "Threads",
@@ -118,7 +118,7 @@ def main():
     original_configuration = Configuration(input_data, 0, 0, 0, 0, 0, "original")
     original_configuration.evaluate()
     best = original_configuration
-    max_overhead = args.Overhead # * original_configuration.lines_num // 100
+    max_overhead = args.Overhead * original_configuration.lines_num // 100
     print("Max absolute overhead:", max_overhead)
     print("Original mean heat:", original_configuration.mean_heat)
     print()
@@ -174,37 +174,6 @@ def main():
             args = (),
             callback = save_if_best
         )
-
-    # for constant_obfuscation in range(0, max_overhead):
-    #     for obfuscation_chain_length in range(2, max(3, max_overhead)):
-    #         if constant_obfuscation * obfuscation_chain_length >= max_overhead: break
-
-    #         for garbage_blocks in range(0, max_overhead):
-    #             for garbage_length in range(1, max(2, max_overhead)):
-    #                 if constant_obfuscation * obfuscation_chain_length + garbage_blocks * garbage_length >= max_overhead: break
-
-    #                 if constant_obfuscation == 0: obfuscation_chain_length = 0
-    #                 if garbage_blocks == 0: garbage_length = 0
-
-    #                 register_scrumbling = max_overhead - constant_obfuscation * obfuscation_chain_length - garbage_blocks * garbage_length - 1
-    #                 iteration += 1
-    #                 configuration = Configuration(
-    #                     input_data, 
-    #                     register_scrumbling, 
-    #                     constant_obfuscation, 
-    #                     obfuscation_chain_length, 
-    #                     garbage_blocks, 
-    #                     garbage_length,
-    #                     iteration
-    #                 )
-    #                 thread_pool.apply_async(
-    #                     configuration.evaluate,
-    #                     args = (),
-    #                     callback = save_if_best
-    #                 )
-
-    #                 if garbage_blocks == 0: break
-    #         if constant_obfuscation == 0: break
 
 
     thread_pool.close()
