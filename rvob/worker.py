@@ -1,4 +1,6 @@
 from multiprocessing import Pool
+from logger import INFO
+from tqdm import tqdm
 
 class Worker:
     def __init__(self, configurations, optimize_overhead, target_heat, original_configuration, configurations_backup, n_threads, Log):
@@ -16,6 +18,9 @@ class Worker:
         self.Log = Log
 
     def run(self):
+        if self.Log.log_level == INFO:
+            self.progress_bar = tqdm(total = self.total_iterations)
+
         for configuration in self.configurations:
             try:
                 self.thread_pool.apply_async(
@@ -30,6 +35,9 @@ class Worker:
         
         self.thread_pool.close()
         self.thread_pool.join()
+        if self.Log.log_level == INFO:
+            self.progress_bar.close()
+            
         return self.best
 
     def callback(self, configuration):
@@ -37,11 +45,16 @@ class Worker:
         self.Log.debug("New mean heat:", configuration.mean_heat)
         self.Log.debug("Overhead introduced:", configuration.lines_num - self.original_configuration.lines_num)
         self.Log.debug()
+        if self.Log.log_level == INFO:
+            self.progress_bar.update(1)
 
         if self.optimize_overhead:
             if configuration.mean_heat >= self.target_heat:
                 self.best = configuration
                 self.thread_pool.terminate()
+                if self.Log.log_level == INFO:
+                    self.progress_bar.close()
+
         elif configuration.mean_heat > self.best.mean_heat:
             self.best = configuration
 

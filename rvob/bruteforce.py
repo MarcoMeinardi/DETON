@@ -61,7 +61,7 @@ def get_args():
         metavar="logging level",
         help="The verbosity of the logs (debug, info, warning, error)",
         required=False,
-        default='debug',
+        default='info',
         type=str)
 
     return parser.parse_args()
@@ -134,7 +134,7 @@ def main():
 
     original_configuration = Configuration(input_data, 0, 0, 0, 0, 0, "original")
     original_configuration.evaluate()
-    Log.info("Original mean heat:", original_configuration.mean_heat)
+    Log.info(f"Original mean heat: {original_configuration.mean_heat:.3f}")
 
     original_configuration_dict = original_configuration.__dict__.copy()
     del original_configuration_dict["input_data"]
@@ -150,6 +150,7 @@ def main():
     max_overhead = args.overhead * original_configuration.lines_num // 100
     if args.optimize == "heat":
         Log.info("Max absolute overhead:", max_overhead)
+        Log.info()
         best = original_configuration
 
         todo_configurations = []
@@ -171,7 +172,8 @@ def main():
             return
         best = None
         target_heat = args.heat * original_configuration.mean_heat / 100
-        Log.info(f"Target heat: {target_heat}")
+        Log.info(f"Target heat: {target_heat:.3f}")
+        Log.info()
         left = 0
         right = args.overhead + 1
         already_done = set()  # for small programs, close percentage may lead to the same absolute overhead

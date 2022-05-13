@@ -3,3 +3,4 @@ BitVector==3.4.9
 argparse~=1.4.0
 matplotlib~=3.4.3
 numpy
+tqdm
