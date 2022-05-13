@@ -17,11 +17,17 @@ class Worker:
 
     def run(self):
         for configuration in self.configurations:
-            self.thread_pool.apply_async(
-                configuration.evaluate,
-                args = (),
-                callback = self.callback
-            )
+            try:
+                self.thread_pool.apply_async(
+                    configuration.evaluate,
+                    args = (),
+                    callback=self.callback
+                )
+            except ValueError:
+                # when optimizing for overhead, it might happen that a solution is found almost immediately,
+                # if this happens, the pool get closed and I cannot add tasks to it, raising this error 
+                break
+        
         self.thread_pool.close()
         self.thread_pool.join()
         return self.best

@@ -2,6 +2,7 @@ from deton import execute
 from os import path
 from ast import literal_eval
 import re
+import time
 
 class Configuration:
     def __init__(self, input_data, register_scrumbling, constant_obfuscation, obfuscation_chain_length, garbage_blocks, garbage_length, id):
@@ -24,6 +25,7 @@ class Configuration:
         )
 
     def evaluate(self):
+        start_time = time.thread_time()
         if isinstance(self.id, int):
             output_name = str(self.id % 20) # to avoid generating thousands of files, but also avoid file collision in parallel threads
         else:
@@ -44,6 +46,8 @@ class Configuration:
         with open(path.dirname(__file__) + f"/metrics/output_{output_name}.s") as f:
             self.lines_num = f.read().count("\n")
 
+        end_time = time.thread_time()
+        self.running_time = end_time - start_time
         return self
 
     def __str__(self):

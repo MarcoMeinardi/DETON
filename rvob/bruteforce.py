@@ -3,7 +3,6 @@ from os import path
 import json
 from ast import literal_eval
 from multiprocessing import Pool
-import time
 
 from logger import *
 from configuration import Configuration
@@ -114,7 +113,6 @@ def preprocess_configurations(todo_configurations, max_overhead, input_data):
     return iteration
 
 def main():
-    start_time = time.time()
     global best, original_configuration, total_iterations, all_configurations
     args = get_args()
 
@@ -175,10 +173,14 @@ def main():
         target_heat = args.heat * original_configuration.mean_heat / 100
         Log.info(f"Target heat: {target_heat}")
         left = 0
-        right = max_overhead + 1
+        right = args.overhead + 1
+        already_done = set()  # for small programs, close percentage may lead to the same absolute overhead
         while left <= right:
-            actual_overhead = left + (right - left) // 2
-            Log.info(f"Bounds: ({left}:{right} -> {actual_overhead})")  #should be debug, but debug is too verbose
+            actual_overhead_percentage = left + (right - left) // 2
+            actual_overhead = actual_overhead_percentage * original_configuration.lines_num // 100
+            if actual_overhead in already_done:
+                break  # if this happens, left is close enought to right to make it always happen
+            Log.info(f"Bounds: [{left} % : {right} %] -> {actual_overhead}")  #should be debug, but debug is too verbose
             todo_configurations = []
             total_iterations = preprocess_configurations(todo_configurations, actual_overhead, input_data)
 
@@ -193,21 +195,20 @@ def main():
             )
             maybe_best = worker.run()
             if maybe_best is None:
-                left = actual_overhead + 1
+                left = actual_overhead_percentage + 1
             else:
                 best = maybe_best  # this might not be the best solution for this overhead, it may be worth running the whole process with this overhead (todo: cache already done configurations)
-                right = actual_overhead - 1
+                right = actual_overhead_percentage - 1
 
         if best is None:
             Log.error("Either you lied to me :D or DETON is too stupidly random")
-            Log.error(f"No configuration found with (absolute) heat >= {target_heat} and (absolute) overhead <= {max_overhead}")
+            Log.error(f"No configuration found with (absolute) heat >= {target_heat:.3f} and (absolute) overhead <= {max_overhead}")
             return
 
+    total_time = sum(configuration["running_time"] for configuration in all_configurations["all"])
 
-    stop_time = time.time()
-    total_time = stop_time - start_time
     Log.info()
-    Log.info(f"DONE (Total time: {total_time:.3f} s)")
+    Log.info(f"DONE (CPU time: {total_time:.3f} s)")
     Log.info("-" * 40)
     Log.info("Best parameters:")
     Log.info("Register scrambling:", best.register_scrumbling)
@@ -228,7 +229,7 @@ def main():
     best_configuration_dict = best.__dict__.copy()
     del best_configuration_dict["input_data"]
     all_configurations["best"] = best_configuration_dict
-    all_configurations["total_time"] = total_time
+    all_configurations["CPU_time"] = total_time
     all_configurations["all"].sort(key = lambda x: x["id"])
 
     with open(configurations_file, "w") as f:
