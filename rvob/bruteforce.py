@@ -1,5 +1,5 @@
 import argparse
-from os import path
+from os import access, path
 import json
 from ast import literal_eval
 from multiprocessing import Pool
@@ -30,14 +30,15 @@ def get_args():
     parser.add_argument(
         "-O", "--overhead",
         metavar="Max overhead value or overhead upper bound",
-        help="The maximum Overhead value wanted, in percentage, compared to the original file or the upper bound for the overhead optimization",
+        help="The maximum tolerable overhead value, in percentage, compared to the original file",
         required=False,
         type=int)
 
     parser.add_argument(
         "-H", "--heat",
         metavar="Target heat",
-        help="The target mean heat, in percentage, to search for, while minimizing the overhead (required only if optimizing for overhead)",
+        # Percentage heat wouldn't make much sense, because the initial heat varies, because of randomness
+        help="The absolute target mean heat to search for, while minimizing the overhead",
         required=False,
         type=int)
 
@@ -97,8 +98,6 @@ def preprocess_configurations(todo_configurations, max_overhead, input_data):
                     if garbage_blocks == 0: break
             if constant_obfuscation == 0: break
 
-    return iteration
-
 def show_and_save_best(best, original, all_configurations, configurations_file, total_time):
     Log.info()
     Log.info(f"DONE (CPU time: {total_time:.3f} s)")
@@ -138,6 +137,13 @@ def main():
     else:
         Log.log_level = log_dict[args.log_level]
 
+    if args.optimize == "overhead" and args.heat is None:
+        Log.error("Target heat must be specified while optimizing for overhead")
+        return
+    if args.optimize == "heat" and args.overhead is None:
+        Log.error("Target overhead must be specified while optimizing for heat")
+        return
+
     input_file = args.file
     threads = args.threads
     configurations_file = args.output
@@ -163,14 +169,14 @@ def main():
         "all": []
     }
 
-    max_overhead = args.overhead * original.lines_num // 100
     if args.optimize == "heat":
+        max_overhead = args.overhead * original.lines_num // 100
         Log.info("Max absolute overhead:", max_overhead)
         Log.info()
         best = original
 
         todo_configurations = []
-        total_iterations = preprocess_configurations(todo_configurations, max_overhead, input_data)
+        preprocess_configurations(todo_configurations, max_overhead, input_data)
 
         worker = Worker(
             configurations=todo_configurations,
@@ -182,25 +188,55 @@ def main():
             Log=Log
         )
         best = worker.run()
-    else:
-        if args.heat is None:
-            Log.error("Target heat must be specified while optimizing for overhead")
-            return
+
+    else:  # optimize for overhead
         best = None
-        target_heat = args.heat * original.mean_heat / 100
+        target_heat = args.heat
         Log.info(f"Target heat: {target_heat:.3f}")
         Log.info()
-        left = 0
-        right = args.overhead + 1
+
+        # start from 1% and multiply times two, until the required heat is reached,
+        # than binary search between the first hit and the last miss, to get the minimum overhead
+        actual_overhead_percentage = 1
+        hit = False
+        last_miss = 0
+        while not hit:
+            actual_overhead = actual_overhead_percentage * original.lines_num // 100
+            Log.info(f"Trying with overhead = {actual_overhead_percentage} %  ({actual_overhead})")
+            todo_configurations = []
+            preprocess_configurations(todo_configurations, actual_overhead, input_data)
+
+            worker = Worker(
+                configurations=todo_configurations,
+                optimize_overhead=True,
+                target_heat=target_heat,
+                original=original,
+                configurations_backup=all_configurations["all"],
+                n_threads=threads,
+                Log=Log
+            )
+            maybe_best = worker.run()
+            if maybe_best is not None:
+                hit = True
+                first_hit = actual_overhead_percentage
+                best = maybe_best
+            else:
+                last_miss = actual_overhead_percentage
+                actual_overhead_percentage *= 2
+
+        Log.info(f"First configuration with heat >= {args.heat} %  ({target_heat:.3f}) found")
+        right = first_hit - 1
+        left = min(last_miss + 1, right)  # I think this is needed just for 0 % overhead
         already_done = set()  # for small programs, close percentage may lead to the same absolute overhead
+
         while left <= right:
             actual_overhead_percentage = left + (right - left) // 2
             actual_overhead = actual_overhead_percentage * original.lines_num // 100
             if actual_overhead in already_done:
                 break  # if this happens, left is close enought to right to make it always happen
-            Log.info(f"Bounds: [{left} % : {right} %] -> {actual_overhead}")  #should be debug, but debug is too verbose
+            Log.info(f"Bounds: [{left} % : {right} %] -> {actual_overhead}")
             todo_configurations = []
-            total_iterations = preprocess_configurations(todo_configurations, actual_overhead, input_data)
+            preprocess_configurations(todo_configurations, actual_overhead, input_data)
 
             worker = Worker(
                 configurations=todo_configurations,
@@ -218,10 +254,7 @@ def main():
                 best = maybe_best  # this might not be the best solution for this overhead, it may be worth running the whole process with this overhead (todo: cache already done configurations)
                 right = actual_overhead_percentage - 1
 
-        if best is None:
-            Log.error("Either you lied to me :D or DETON is too stupidly random")
-            Log.error(f"No configuration found with (absolute) heat >= {target_heat:.3f} and (absolute) overhead <= {max_overhead}")
-            return
+        assert best is not None, "Wait?!?! This cannot happen!"
 
     total_time = sum(configuration["running_time"] for configuration in all_configurations["all"])
 
