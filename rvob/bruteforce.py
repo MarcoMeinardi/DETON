@@ -224,7 +224,7 @@ def main():
                 last_miss = actual_overhead_percentage
                 actual_overhead_percentage *= 2
 
-        Log.info(f"First configuration with heat >= {args.heat} %  ({target_heat:.3f}) found")
+        Log.info(f"First configuration with heat >= {args.heat} found")
         right = first_hit - 1
         left = min(last_miss + 1, right)  # I think this is needed just for 0 % overhead
         already_done = set()  # for small programs, close percentage may lead to the same absolute overhead
