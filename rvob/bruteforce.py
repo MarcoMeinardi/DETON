@@ -3,6 +3,7 @@ from os import path
 import json
 from ast import literal_eval
 from multiprocessing import Pool
+import sys
 
 from logger import *
 from configuration import Configuration
@@ -30,7 +31,7 @@ def get_args():
         "-O", "--overhead",
         metavar="Max overhead value or overhead upper bound",
         help="The maximum Overhead value wanted, in percentage, compared to the original file or the upper bound for the overhead optimization",
-        required=True,
+        required=False,
         type=int)
 
     parser.add_argument(
@@ -65,22 +66,8 @@ def get_args():
         type=str)
 
     return parser.parse_args()
-
-def save_if_best(configuration):
-    global best, original_configuration, total_iterations, all_configurations
-    Log.debug(f"Executed with: {configuration} ({configuration.id} / {total_iterations})")
-    Log.debug("New mean heat:", configuration.mean_heat)
-    Log.debug("Overhead introduced:", configuration.lines_num - original_configuration.lines_num)
-    Log.debug()
-    if configuration.mean_heat > best.mean_heat:
-        best = configuration
-
-    configuration_dict = configuration.__dict__.copy()
-    del configuration_dict["input_data"]
-    all_configurations["all"].append(configuration_dict)
     
 def preprocess_configurations(todo_configurations, max_overhead, input_data):
-    # Calculate total iterations
     max_overhead += 1
     iteration = 0
     for constant_obfuscation in range(0, max_overhead):
@@ -112,8 +99,36 @@ def preprocess_configurations(todo_configurations, max_overhead, input_data):
 
     return iteration
 
+def show_and_save_best(best, original, all_configurations, configurations_file, total_time):
+    Log.info()
+    Log.info(f"DONE (CPU time: {total_time:.3f} s)")
+    Log.info("-" * 40)
+    Log.info("Best parameters:")
+    Log.info("Register scrambling:", best.register_scrumbling)
+    Log.info("Constant obfuscation:", best.constant_obfuscation)
+    Log.info("Obfuscation chain length:", best.obfuscation_chain_length)
+    Log.info("Garbage blocks:", best.garbage_blocks)
+    Log.info("Garbage length:", best.garbage_length)
+    Log.info()
+    Log.info("Original mean heat:", original.mean_heat)
+    Log.info(f"Best mean heat: {best.mean_heat} ({best.mean_heat / original.mean_heat * 100:.3f} %)")
+    Log.info(f"Overhead introduced: {best.lines_num - original.lines_num} ({(best.lines_num - original.lines_num) / original.lines_num * 100:.3f} %)")
+    Log.info("-" * 40)
+
+    # Save best run
+    best.id = "best"
+    best.evaluate()
+
+    best_configuration_dict = best.__dict__.copy()
+    del best_configuration_dict["input_data"]
+    all_configurations["best"] = best_configuration_dict
+    all_configurations["CPU_time"] = total_time
+    all_configurations["all"].sort(key = lambda x: x["id"])
+
+    with open(configurations_file, "w") as f:
+        f.write(json.dumps(all_configurations))
+
 def main():
-    global best, original_configuration, total_iterations, all_configurations
     args = get_args()
 
     args.log_level = args.log_level.upper()
@@ -132,26 +147,27 @@ def main():
     else:
         input_data = (input_file, '')
 
-    original_configuration = Configuration(input_data, 0, 0, 0, 0, 0, "original")
-    original_configuration.evaluate()
-    Log.info(f"Original mean heat: {original_configuration.mean_heat:.3f}")
+    original = Configuration(input_data, 0, 0, 0, 0, 0, "original")
+    original.evaluate()
+    Log.info(f"Original mean heat: {original.mean_heat:.3f}")
 
-    original_configuration_dict = original_configuration.__dict__.copy()
-    del original_configuration_dict["input_data"]
+    original_dict = original.__dict__.copy()
+    del original_dict["input_data"]
     all_configurations = {
         "best": None,
-        "original": original_configuration_dict,
+        "original": original_dict,
         "file": input_data[0],
         "total_time": -1,
         "threads": threads,
+        "command": sys.argv[1:],
         "all": []
     }
 
-    max_overhead = args.overhead * original_configuration.lines_num // 100
+    max_overhead = args.overhead * original.lines_num // 100
     if args.optimize == "heat":
         Log.info("Max absolute overhead:", max_overhead)
         Log.info()
-        best = original_configuration
+        best = original
 
         todo_configurations = []
         total_iterations = preprocess_configurations(todo_configurations, max_overhead, input_data)
@@ -160,7 +176,7 @@ def main():
             configurations=todo_configurations,
             optimize_overhead=False,
             target_heat=None,
-            original_configuration=original_configuration,
+            original=original,
             configurations_backup=all_configurations["all"],
             n_threads=threads,
             Log=Log
@@ -171,7 +187,7 @@ def main():
             Log.error("Target heat must be specified while optimizing for overhead")
             return
         best = None
-        target_heat = args.heat * original_configuration.mean_heat / 100
+        target_heat = args.heat * original.mean_heat / 100
         Log.info(f"Target heat: {target_heat:.3f}")
         Log.info()
         left = 0
@@ -179,7 +195,7 @@ def main():
         already_done = set()  # for small programs, close percentage may lead to the same absolute overhead
         while left <= right:
             actual_overhead_percentage = left + (right - left) // 2
-            actual_overhead = actual_overhead_percentage * original_configuration.lines_num // 100
+            actual_overhead = actual_overhead_percentage * original.lines_num // 100
             if actual_overhead in already_done:
                 break  # if this happens, left is close enought to right to make it always happen
             Log.info(f"Bounds: [{left} % : {right} %] -> {actual_overhead}")  #should be debug, but debug is too verbose
@@ -190,7 +206,7 @@ def main():
                 configurations=todo_configurations,
                 optimize_overhead=True,
                 target_heat=target_heat,
-                original_configuration=original_configuration,
+                original=original,
                 configurations_backup=all_configurations["all"],
                 n_threads=threads,
                 Log=Log
@@ -209,33 +225,8 @@ def main():
 
     total_time = sum(configuration["running_time"] for configuration in all_configurations["all"])
 
-    Log.info()
-    Log.info(f"DONE (CPU time: {total_time:.3f} s)")
-    Log.info("-" * 40)
-    Log.info("Best parameters:")
-    Log.info("Register scrambling:", best.register_scrumbling)
-    Log.info("Constant obfuscation:", best.constant_obfuscation)
-    Log.info("Obfuscation chain length:", best.obfuscation_chain_length)
-    Log.info("Garbage blocks:", best.garbage_blocks)
-    Log.info("Garbage length:", best.garbage_length)
-    Log.info()
-    Log.info("Original mean heat:", original_configuration.mean_heat)
-    Log.info(f"Best mean heat: {best.mean_heat} ({best.mean_heat / original_configuration.mean_heat * 100:.3f} %)")
-    Log.info(f"Overhead introduced: {best.lines_num - original_configuration.lines_num} ({(best.lines_num - original_configuration.lines_num) / original_configuration.lines_num * 100:.3f} %)")
-    Log.info("-" * 40)
+    show_and_save_best(best, original, all_configurations, configurations_file, total_time)
 
-    # Save best run
-    best.id = "best"
-    best.evaluate()
-
-    best_configuration_dict = best.__dict__.copy()
-    del best_configuration_dict["input_data"]
-    all_configurations["best"] = best_configuration_dict
-    all_configurations["CPU_time"] = total_time
-    all_configurations["all"].sort(key = lambda x: x["id"])
-
-    with open(configurations_file, "w") as f:
-        f.write(json.dumps(all_configurations))
 
 if __name__ == "__main__":
     main()
