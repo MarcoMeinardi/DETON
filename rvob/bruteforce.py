@@ -29,8 +29,8 @@ def get_args():
 
     parser.add_argument(
         "-O", "--overhead",
-        metavar="Max overhead value or overhead upper bound",
-        help="The maximum tolerable overhead value, in percentage, compared to the original file",
+        metavar="Max overhead value or overhead lower bound",
+        help="The maximum tolerable overhead value, in percentage, compared to the original file or the lower bound for the overhead optimization search",
         required=False,
         type=int)
 
@@ -51,7 +51,7 @@ def get_args():
         type=int)
 
     parser.add_argument(
-        "-o", "--output",
+        "-o", "--output", "-out",
         metavar="output file",
         help="The path of the file where all the attempted configurations should be saved in .json format",
         required=False,
@@ -144,6 +144,9 @@ def main():
         Log.error("Target overhead must be specified while optimizing for heat")
         return
 
+    if args.optimize == "overhead" and args.heat > 27:
+        Log.warning("Heat >= 27 would probably not be found, this program may run forever")
+
     input_file = args.file
     threads = args.threads
     configurations_file = args.output
@@ -197,7 +200,11 @@ def main():
 
         # start from 1% and multiply times two, until the required heat is reached,
         # than binary search between the first hit and the last miss, to get the minimum overhead
-        actual_overhead_percentage = 1
+        if args.overhead is None:
+            actual_overhead_percentage = 1
+        else:
+            actual_overhead_percentage = args.overhead
+
         hit = False
         last_miss = 0
         while not hit:
